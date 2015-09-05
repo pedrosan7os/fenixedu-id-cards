@@ -20,20 +20,16 @@ package org.fenixedu.idcards.ui;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.xml.ws.BindingProvider;
 
-import org.apache.cxf.endpoint.Client;
-import org.apache.cxf.frontend.ClientProxy;
-import org.apache.cxf.jaxws.JaxWsProxyFactoryBean;
-import org.apache.cxf.transport.http.HTTPConduit;
-import org.apache.cxf.ws.addressing.WSAddressingFeature;
 import org.apache.struts.action.Action;
 import org.apache.struts.action.ActionForm;
 import org.apache.struts.action.ActionForward;
 import org.apache.struts.action.ActionMapping;
+import org.datacontract.schemas._2004._07.portalsantander_wcf.RegisterData;
 import org.fenixedu.academic.domain.Person;
 import org.fenixedu.academic.predicate.AccessControl;
 import org.fenixedu.academic.ui.struts.action.person.PersonApplication.PersonalAreaApp;
-import org.fenixedu.bennu.core.util.CoreConfiguration;
 import org.fenixedu.bennu.struts.annotations.Forward;
 import org.fenixedu.bennu.struts.annotations.Forwards;
 import org.fenixedu.bennu.struts.annotations.Mapping;
@@ -41,9 +37,10 @@ import org.fenixedu.bennu.struts.portal.StrutsFunctionality;
 import org.fenixedu.idcards.IdCardsConfiguration;
 
 import pt.sibscartoes.portal.wcf.IRegistersInfo;
-import pt.sibscartoes.portal.wcf.dto.RegisterData;
+import pt.sibscartoes.portal.wcf.RegistersInfo;
 
 import com.google.common.base.Strings;
+import com.sun.xml.ws.developer.MemberSubmissionAddressingFeature;
 
 @StrutsFunctionality(app = PersonalAreaApp.class, descriptionKey = "label.identification.card", path = "identification-card",
         titleKey = "label.identification.card")
@@ -55,8 +52,10 @@ public class IdentificationCardDA extends Action {
     public ActionForward execute(final ActionMapping mapping, final ActionForm actionForm, final HttpServletRequest request,
             final HttpServletResponse response) throws Exception {
         final Person person = AccessControl.getPerson();
-        final String cardProdutionState =
-                CoreConfiguration.getConfiguration().developmentMode() ? "<Cannot read card state in development mode>" : getIdentificationCardState(person);
+//        final String cardProdutionState =
+//                CoreConfiguration.getConfiguration().developmentMode() ? "<Cannot read card state in development mode>" : getIdentificationCardState(person);
+
+        final String cardProdutionState = getIdentificationCardState(person);
 
         request.setAttribute("person", person);
         request.setAttribute("state", cardProdutionState);
@@ -64,25 +63,55 @@ public class IdentificationCardDA extends Action {
     }
 
     private String getIdentificationCardState(Person person) {
-        JaxWsProxyFactoryBean factory = new JaxWsProxyFactoryBean();
+        try {
+//            ObjectFactory fazedorDeCenas = new ObjectFactory();
 
-        factory.setServiceClass(IRegistersInfo.class);
-        factory.setAddress("https://portal.sibscartoes.pt/wcf/RegistersInfo.svc");
-        factory.setBindingId("http://schemas.xmlsoap.org/wsdl/soap12/");
-        factory.getFeatures().add(new WSAddressingFeature());
-        IRegistersInfo port = (IRegistersInfo) factory.create();
+            final String userName = Strings.padEnd(person.getUsername(), 10, 'x');
 
-        /*define WSDL policy*/
-        Client client = ClientProxy.getClient(port);
-        HTTPConduit http = (HTTPConduit) client.getConduit();
-        http.getAuthorization().setUserName(IdCardsConfiguration.getConfiguration().sibsWebServiceUsername());
-        http.getAuthorization().setPassword(IdCardsConfiguration.getConfiguration().sibsWebServicePassword());
+            MemberSubmissionAddressingFeature feature = new MemberSubmissionAddressingFeature(true, true);
 
-        final String userName = Strings.padEnd(person.getUsername(), 10, 'x');
-        RegisterData statusInformation = port.getRegister(userName);
+            IRegistersInfo client = new RegistersInfo(feature).getRegistersInfoWsHttp();
+            setupClient((BindingProvider) client);
+            RegisterData status = client.getRegister(userName);
 
-        return statusInformation.getStatusDate().getValue().replaceAll("-", "/") + " : "
-                + statusInformation.getStatus().getValue() + " - " + statusInformation.getStatusDesc().getValue();
-
+            return status.getStatusDate().getValue().replaceAll("-", "/") + " : " + status.getStatus().getValue() + " - "
+                    + status.getStatusDesc().getValue();
+        } finally {
+        }
     }
+
+    protected void setupClient(BindingProvider bindingProvider) {
+        bindingProvider.getRequestContext().put(BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
+                "https://portal.sibscartoes.pt/wcf/RegistersInfo.svc");
+
+        bindingProvider.getRequestContext().put(BindingProvider.USERNAME_PROPERTY,
+                IdCardsConfiguration.getConfiguration().sibsWebServiceUsername());
+        bindingProvider.getRequestContext().put(BindingProvider.PASSWORD_PROPERTY,
+                IdCardsConfiguration.getConfiguration().sibsWebServicePassword());
+    }
+
+//
+//    private String x(Person person) {
+//
+//        JaxWsProxyFactoryBean factory = new JaxWsProxyFactoryBean();
+//
+//        factory.setServiceClass(IRegistersInfo.class);
+//        factory.setAddress("https://portal.sibscartoes.pt/wcf/RegistersInfo.svc");
+//        factory.setBindingId("http://schemas.xmlsoap.org/wsdl/soap12/");
+//        factory.getFeatures().add(new WSAddressingFeature());
+//        IRegistersInfo port = (IRegistersInfo) factory.create();
+//
+//        /*define WSDL policy*/
+//        Client client = ClientProxy.getClient(port);
+//        HTTPConduit http = (HTTPConduit) client.getConduit();
+//        http.getAuthorization().setUserName(IdCardsConfiguration.getConfiguration().sibsWebServiceUsername());
+//        http.getAuthorization().setPassword(IdCardsConfiguration.getConfiguration().sibsWebServicePassword());
+//
+//        final String userName = Strings.padEnd(person.getUsername(), 10, 'x');
+//        RegisterData statusInformation = port.getRegister(userName);
+//
+//        return statusInformation.getStatusDate().getValue().replaceAll("-", "/") + " : "
+//                + statusInformation.getStatus().getValue() + " - " + statusInformation.getStatusDesc().getValue();
+//
+//    }
 }
